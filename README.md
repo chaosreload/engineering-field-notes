@@ -24,6 +24,7 @@ Each note documents: what the project does, how its architecture works, key desi
 | [Zeroboot](docs/ai-infra/zeroboot.md) | VM sandbox for safe code execution | When you need isolated execution environments |
 | [Kiro Gateway](docs/ai-infra/kiro-gateway.md) | AI API proxy & routing layer | When managing multiple AI provider endpoints |
 | [E2B](docs/ai-infra/E2B.md) | Open-source cloud sandbox for AI code execution | When you need secure isolated code execution for AI agents |
+| [E2B Infra](docs/ai-infra/infra.md) | Firecracker+Nomad infrastructure powering E2B sandboxes | When you want to understand how cloud sandboxes work at the systems level |
 
 ### 🗄️ Databases
 
