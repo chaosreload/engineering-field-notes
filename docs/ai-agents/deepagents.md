@@ -239,6 +239,58 @@ python -m deepagents_acp
 
 ## Demo 示例
 
+### 0. 实际运行记录（dev-server，2026-03-23，pyenv Python 3.12.12）
+
+任务设计：用经典编程任务验证 agent 的完整能力链路——**规划 → 写文件 → 执行 shell → 自主容错**
+
+```
+任务 prompt:
+1. Create a file called fib.py with a fibonacci function (both recursive and iterative versions)
+2. Create a file called test_fib.py that tests both versions
+3. Run the tests and show me the results
+```
+
+#### Agent 实际执行过程（Claude Sonnet 4.6）
+
+Sonnet 4.6 遇到 Permission denied 后，主动先用 `execute` 探测工作目录，再切换为绝对路径，一次成功：
+
+```
+⚙️  call [write_todos]: 拆解任务，标记第 1 项 in_progress
+📤 result: Updated todo list
+
+⚙️  call [write_file]: {'file_path': '/fib.py', ...}
+📤 result: Error writing file '/fib.py': [Errno 13] Permission denied
+
+⚙️  call [execute]: {'command': 'echo $HOME && pwd'}
+📤 result: /home/ubuntu
+           /tmp/deepagents-sandbox          ← 确认了实际工作目录
+
+⚙️  call [write_file]: {'file_path': '/tmp/deepagents-sandbox/fib.py', ...}
+📤 result: Updated file /tmp/deepagents-sandbox/fib.py  ✅
+
+⚙️  call [write_todos]: 标记第 1 项 completed，第 2 项 in_progress
+⚙️  call [write_file]: {'file_path': '/tmp/deepagents-sandbox/test_fib.py', ...}
+📤 result: Updated file /tmp/deepagents-sandbox/test_fib.py  ✅
+
+⚙️  call [write_todos]: 标记第 2 项 completed，第 3 项 in_progress
+⚙️  call [execute]: {'command': 'cd /tmp/deepagents-sandbox && python -m pytest test_fib.py -v'}
+📤 result: platform linux -- Python 3.12.12, pytest-9.0.2
+           45 passed ✅
+
+⚙️  call [write_todos]: 标记第 3 项 completed
+🤖 **45/45 tests passed.**
+```
+
+#### Haiku vs Sonnet 4.6 对比
+
+| | Claude 3.5 Haiku | Claude Sonnet 4.6 |
+|--|--|--|
+| 任务规划 | 无 todo 追踪 | 先拆解 todo，逐项标记进度 |
+| 遇到权限错误 | 重试同样路径两次再切 shell | 先探测工作目录，一次切换成功 |
+| 写文件方式 | 用 shell `cat > file` 写入 | 直接用 `write_file` 绝对路径 |
+| 测试工具 | 无 pytest → 降级 unittest | 直接用 pytest，环境感知更强 |
+| 测试数量 | 2 tests | 45 tests（更全面） |
+
 ### 1. 基础用法
 
 ```python
@@ -296,7 +348,54 @@ subagents:
 
 ---
 
-## 关键发现 / 学习心得
+---
+
+## 踩坑记录
+
+### 坑 1：Python 版本
+- **问题**：直接用系统 `python3`（3.10），deepagents 要求 3.11+
+- **正确做法**：`eval "$(pyenv init -)" && pyenv shell 3.12.12`
+
+### 坑 2：Bedrock 模型 Legacy
+- **问题**：`us.anthropic.claude-3-5-sonnet-20241022-v2:0` 报 "Legacy / not used in 15 days"
+- **原因**：Bedrock 会把超过 15 天没调用的模型标为 Legacy，与 IAM 权限无关
+- **解决**：用最新跨区域 inference profile：`us.anthropic.claude-sonnet-4-6`
+
+### 坑 3：FilesystemMiddleware 不接受 sandbox_dir 参数
+- **问题**：`FilesystemMiddleware(sandbox_dir=...)` → `TypeError: unexpected keyword argument`
+- **解决**：sandbox 通过 `backend` 参数传入，不是 middleware 的参数
+  ```python
+  # 错误
+  FilesystemMiddleware(sandbox_dir="/tmp/sandbox")
+  # 正确
+  create_deep_agent(backend=LocalShellBackend(root_dir="/tmp/sandbox"))
+  ```
+
+### 坑 4：重复 middleware
+- **问题**：手动传 `middleware=[FilesystemMiddleware(...)]` → "Please remove duplicate middleware instances"
+- **原因**：`create_deep_agent` 默认已包含完整 middleware 栈
+- **解决**：通过顶层参数（`backend`、`model`、`tools`）定制，不要手动传默认已有的 middleware
+
+### 坑 5：LocalShellBackend 参数名
+- **问题**：`LocalShellBackend(cwd=...)` → `TypeError: unexpected keyword argument 'cwd'`
+- **正确参数**：`root_dir`（工作目录），`inherit_env=True`，`virtual_mode=False`
+
+### 坑 6：write_file 路径问题
+- **现象**：agent 调 `write_file('/fib.py', ...)` 报 Permission denied
+- **原因**：`virtual_mode=False` 时路径按字面解析，`/fib.py` 是根目录
+- **Agent 自动处理**：失败后自动切换到 `execute` 用 shell 写文件
+- **建议**：用 `virtual_mode=True`，此时 `/fib.py` 映射到 `{root_dir}/fib.py`
+
+### 坑 7：stream 输出中 node_output 可能为 None
+- **解决**：加判断 `if node_name == "__end__" or node_output is None: continue`
+
+### 坑 8：messages 可能是 Overwrite 对象
+- **问题**：`for msg in messages` → `TypeError: 'Overwrite' object is not iterable`
+- **解决**：`if hasattr(msgs, "__iter__") and not isinstance(msgs, str): msg_list = list(msgs)`
+
+---
+
+## 关键结论
 
 ### 1. 中间件架构是最大亮点
 
@@ -323,6 +422,18 @@ deepagents-acp 让 deepagents 可以作为后端接入任何 ACP 兼容的前端
 | 扩展性 | 有限 | Middleware 完全可组合 |
 | Sandbox | 无原生支持 | Modal/Daytona/Runloop 等 |
 | 协议 | 专有 | ACP 开放协议 |
+
+---
+
+---
+
+## 下次可以试的方向
+
+- [ ] 用 `SubAgentMiddleware` 跑多 agent 协作任务
+- [ ] 接入 MCP 工具（通过 `langchain-mcp-adapters`）
+- [ ] 用 `checkpointer` 实现任务暂停/恢复
+- [ ] 跑 deepagents CLI，看 TUI 界面（类 Claude Code 的终端体验）
+- [ ] 用 `interrupt_on` 实现 human-in-the-loop 审批流
 
 ---
 
