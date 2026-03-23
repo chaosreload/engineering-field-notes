@@ -1,0 +1,9 @@
+# 🏗️ AI Infrastructure
+
+Sandboxed execution environments, API proxy layers, and real-time streaming for AI agent systems.
+
+| Project | One-liner | When to use it |
+|---------|-----------|----------------|
+| [Zeroboot](./zeroboot) | VM sandbox for safe code execution | When you need isolated execution environments |
+| [Kiro Gateway](./kiro-gateway) | AI API proxy & routing layer | When managing multiple AI provider endpoints |
+| [AgentCore WebRTC](./agentcore-webrtc) | Real-time voice streaming for AI agents | When building real-time voice AI with KVS/TURN |

@@ -1,0 +1,29 @@
+{
+  "name": "engineering-field-notes",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "> Hands-on deep dives into exceptional open-source projects — not summaries, but real field notes from actually running, breaking, and understanding them.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chaosreload/engineering-field-notes.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/chaosreload/engineering-field-notes/issues"
+  },
+  "homepage": "https://github.com/chaosreload/engineering-field-notes#readme",
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}
