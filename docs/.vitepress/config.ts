@@ -42,6 +42,7 @@ export default defineConfig({
           text: '🏗️ AI Infrastructure',
           items: [
             { text: 'Overview', link: '/ai-infra/' },
+            { text: 'E2B', link: '/ai-infra/E2B' },
             { text: 'kiro-gateway', link: '/ai-infra/kiro-gateway' },
             { text: 'zeroboot', link: '/ai-infra/zeroboot' },
           ]
