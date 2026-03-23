@@ -8,8 +8,9 @@
     "doc": "docs"
   },
   "scripts": {
-    "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs",
+    "gen-sidebar": "node scripts/gen-sidebar.js",
+    "docs:dev": "node scripts/gen-sidebar.js && vitepress dev docs",
+    "docs:build": "node scripts/gen-sidebar.js && vitepress build docs",
     "docs:preview": "vitepress preview docs"
   },
   "repository": {

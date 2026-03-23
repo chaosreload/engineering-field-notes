@@ -5,6 +5,7 @@ export default defineConfig({
   description: 'Hands-on deep dives into exceptional open-source projects — real notes from actually running, breaking, and understanding them.',
   base: '/engineering-field-notes/',
   ignoreDeadLinks: true,
+  srcExclude: ['**/_drafts/**'],
 
   head: [
     ['link', { rel: 'icon', href: '/engineering-field-notes/favicon.ico' }]
@@ -20,7 +21,7 @@ export default defineConfig({
       { text: 'AI Infra', link: '/ai-infra/' },
       { text: 'Databases', link: '/databases/' },
       { text: 'Protocols', link: '/protocols/' },
-      { text: 'Tools', link: '/tools/' },
+      { text: 'Tools', link: '/tools/' }
     ],
 
     sidebar: {
@@ -29,10 +30,10 @@ export default defineConfig({
           text: '🤖 AI Agents',
           items: [
             { text: 'Overview', link: '/ai-agents/' },
-            { text: 'DeepAgents', link: '/ai-agents/deepagents' },
+            { text: 'ai-hedge-fund', link: '/ai-agents/ai-hedge-fund' },
             { text: 'Project AIRI', link: '/ai-agents/airi' },
-            { text: 'AutoResearch', link: '/ai-agents/autoresearch' },
-            { text: 'AI Hedge Fund', link: '/ai-agents/ai-hedge-fund' },
+            { text: 'autoresearch', link: '/ai-agents/autoresearch' },
+            { text: 'deepagents', link: '/ai-agents/deepagents' },
           ]
         }
       ],
@@ -41,8 +42,8 @@ export default defineConfig({
           text: '🏗️ AI Infrastructure',
           items: [
             { text: 'Overview', link: '/ai-infra/' },
-            { text: 'Zeroboot', link: '/ai-infra/zeroboot' },
-            { text: 'Kiro Gateway', link: '/ai-infra/kiro-gateway' },
+            { text: 'kiro-gateway', link: '/ai-infra/kiro-gateway' },
+            { text: 'zeroboot', link: '/ai-infra/zeroboot' },
           ]
         }
       ],
@@ -60,7 +61,7 @@ export default defineConfig({
           text: '🔌 Protocols',
           items: [
             { text: 'Overview', link: '/protocols/' },
-            { text: 'Agent Client Protocol', link: '/protocols/agent-client-protocol' },
+            { text: 'ACP (Agent Client Protocol)', link: '/protocols/agent-client-protocol' },
           ]
         }
       ],
@@ -70,7 +71,7 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/tools/' },
             { text: 'Lightpanda Browser', link: '/tools/lightpanda-browser' },
-            { text: 'WorldMonitor', link: '/tools/worldmonitor' },
+            { text: 'worldmonitor', link: '/tools/worldmonitor' },
           ]
         }
       ],
