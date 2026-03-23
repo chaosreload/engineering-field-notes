@@ -43,7 +43,6 @@ export default defineConfig({
             { text: 'Overview', link: '/ai-infra/' },
             { text: 'Zeroboot', link: '/ai-infra/zeroboot' },
             { text: 'Kiro Gateway', link: '/ai-infra/kiro-gateway' },
-            { text: 'AgentCore WebRTC', link: '/ai-infra/agentcore-webrtc' },
           ]
         }
       ],

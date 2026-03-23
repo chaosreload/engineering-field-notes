@@ -23,7 +23,6 @@ Each note documents: what the project does, how its architecture works, key desi
 |---------|-----------|----------------|
 | [Zeroboot](docs/ai-infra/zeroboot.md) | VM sandbox for safe code execution | When you need isolated execution environments |
 | [Kiro Gateway](docs/ai-infra/kiro-gateway.md) | AI API proxy & routing layer | When managing multiple AI provider endpoints |
-| [AgentCore WebRTC](docs/ai-infra/agentcore-webrtc.md) | Real-time voice streaming for AI agents | When building real-time voice AI with KVS/TURN |
 
 ### 🗄️ Databases
 
