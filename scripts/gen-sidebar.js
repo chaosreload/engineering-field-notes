@@ -124,12 +124,11 @@ export default defineConfig({
   srcExclude: ['**/_drafts/**'],
 
   head: [
-    ['link', { rel: 'icon', href: '/engineering-field-notes/favicon.ico' }]
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/engineering-field-notes/favicon.svg' }]
   ],
 
   themeConfig: {
-    logo: '🔬',
-    siteTitle: 'Engineering Field Notes',
+    siteTitle: '🔬 Engineering Field Notes',
 
     nav: [
 ${serializeNav(nav)}
