@@ -5,9 +5,6 @@ hero:
   name: "Engineering Field Notes"
   text: "Deep dives into exceptional open-source projects"
   tagline: Not summaries. Real notes from actually running, breaking, and understanding them.
-  image:
-    src: /hero.png
-    alt: Engineering Field Notes
   actions:
     - theme: brand
       text: Browse Projects
