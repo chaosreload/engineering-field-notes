@@ -72,6 +72,7 @@ export default defineConfig({
           text: '🛠️ Tools',
           items: [
             { text: 'Overview', link: '/tools/' },
+            { text: 'claude-hud', link: '/tools/claude-hud' },
             { text: 'Lightpanda Browser', link: '/tools/lightpanda-browser' },
             { text: 'worldmonitor', link: '/tools/worldmonitor' },
           ]
