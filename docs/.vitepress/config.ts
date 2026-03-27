@@ -29,6 +29,7 @@ export default defineConfig({
           text: '🤖 AI Agents',
           items: [
             { text: 'Overview', link: '/ai-agents/' },
+            { text: 'NitroGen — 通用游戏 Agent 基础模型', link: '/ai-agents/NitroGen' },
             { text: 'ai-hedge-fund', link: '/ai-agents/ai-hedge-fund' },
             { text: 'Project AIRI', link: '/ai-agents/airi' },
             { text: 'autoresearch', link: '/ai-agents/autoresearch' },
