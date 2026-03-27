@@ -195,6 +195,205 @@ NitroGen 和昨天发布的 ARC-AGI-3 形成了有趣的对比：
 
 MineDojo 系列的演进路线：MineDojo（Minecraft 环境）→ Voyager（LLM Agent）→ **NitroGen（通用游戏基础模型）**
 
+## 实测部署指南 — AWS 双机架构
+
+> 实测日期：2026-03-27
+> 测试人员：weichao luo
+> 测试游戏：Brawlhalla（免费格斗平台游戏）
+
+我们在 AWS 上完成了 NitroGen 的端到端部署验证。以下是完整的踩坑记录和部署步骤。
+
+### 架构总览
+
+```
+┌──────────────────────┐         ZeroMQ (TCP:5555)        ┌──────────────────────┐
+│   推理服务器 (Linux)   │ ◄──────────────────────────────► │  游戏客户端 (Windows)  │
+│                      │         同 VPC 内网通信            │                      │
+│  g6e.xlarge          │                                  │  g4dn.xlarge          │
+│  NVIDIA L40S (48GB)  │                                  │  NVIDIA T4 (16GB)     │
+│  Ubuntu 22.04        │                                  │  Windows Server 2022  │
+│                      │                                  │  + NVIDIA Gaming 驱动  │
+│  serve.py            │                                  │  play.py + Steam      │
+│  (模型推理)           │                                  │  (截屏+手柄模拟+游戏)   │
+└──────────────────────┘                                  └──────────────────────┘
+```
+
+### 硬件配置
+
+| 角色 | 实例类型 | GPU | VRAM | 系统内存 | 区域 | 实际用量 |
+|------|---------|-----|------|---------|------|---------|
+| 推理服务器 | g6e.xlarge | L40S | 48 GB | 32 GiB | us-west-2 | ~2.3 GB VRAM |
+| 游戏客户端 | g4dn.xlarge | T4 | 16 GB | 16 GiB | us-west-2 | 游戏渲染用 |
+
+> 💡 推理服务器只用了 2.3 GB / 48 GB 显存，g4dn.xlarge（T4, 16GB）甚至 g4dn.xlarge 都绰绰有余。选 g6e 是为了后续可能的微调实验。
+
+### 推理服务器搭建（Linux）
+
+```bash
+# 1. 安装 NVIDIA 驱动
+sudo apt-get update
+sudo apt-get install -y ubuntu-drivers-common
+sudo apt-get install -y nvidia-driver-590
+sudo reboot
+
+# 2. 验证 GPU
+nvidia-smi  # 应看到 L40S / T4
+
+# 3. 安装 Python 依赖
+pip3 install --upgrade pip
+git clone https://github.com/MineDojo/NitroGen.git ~/NitroGen
+cd ~/NitroGen
+pip3 install -e ".[serve]"
+pip3 install torchvision  # 必须额外装，pyproject.toml 漏了这个依赖
+
+# 4. 下载模型（1.97 GB）
+pip3 install huggingface_hub
+hf download nvidia/NitroGen ng.pt --local-dir .
+
+# 5. 启动推理服务（后台运行）
+# game_mapping_cfg 为 null 时会提示选择游戏，直接回车跳过
+printf '\n' | nohup python3 scripts/serve.py ng.pt --port 5555 > /tmp/serve.log 2>&1 &
+
+# 6. 验证服务正常
+ss -tlnp | grep 5555  # 应显示 LISTEN
+python3 -c "
+import zmq, pickle
+ctx = zmq.Context()
+sock = ctx.socket(zmq.REQ)
+sock.connect('tcp://localhost:5555')
+sock.setsockopt(zmq.RCVTIMEO, 5000)
+sock.send(pickle.dumps({'type': 'reset'}))
+print(pickle.loads(sock.recv()))
+sock.close(); ctx.term()
+"
+# 应输出: {'status': 'ok'}
+```
+
+### 游戏客户端搭建（Windows Server）
+
+推荐 AMI：`DCV-Windows-2023.1.17701-NVIDIA-gaming-560.81`（自带 NVIDIA Gaming 驱动 + NICE DCV 远程桌面）
+
+#### ⚠️ Windows Server 踩坑集合
+
+**坑 1：浏览器下载被拦截**
+
+Windows Server 默认开启 IE Enhanced Security，浏览器下载任何文件都会报 "Your current security settings do not allow this file to be downloaded"。
+
+解决：所有下载都用 PowerShell 的 `curl.exe`（注意不是 `curl`，那是 `Invoke-WebRequest` 的别名）：
+```powershell
+curl.exe -L -o C:\Temp\xxx.exe "https://..."
+```
+
+**坑 2：Invoke-WebRequest TLS 错误**
+
+GitHub 下载链接会 302 重定向，`Invoke-WebRequest` 处理不好。用 `curl.exe -L` 替代。
+
+**坑 3：ViGEmBus 不支持 Windows Server（最大的坑！）**
+
+NitroGen 用 `vgamepad` 库模拟虚拟 Xbox 手柄，依赖 ViGEmBus 内核驱动。最新版（v1.22.0）的安装程序 **明确拒绝在 Windows Server 上安装**。
+
+**解决方案**：用旧版 v1.17.333 的 MSI 安装包，MSI 格式不检查 OS 版本：
+```powershell
+curl.exe -L -o C:\Temp\ViGEmBusSetup_x64.msi "https://github.com/nefarius/ViGEmBus/releases/download/setup-v1.17.333/ViGEmBusSetup_x64.msi"
+msiexec /i C:\Temp\ViGEmBusSetup_x64.msi /qn /norestart
+```
+或者直接 `pip install vgamepad`，它会自动触发 ViGEmBus 安装向导（同样是旧版 MSI，能在 Server 上装）。
+
+装完后重启。
+
+**坑 4：Python 安装方式变更**
+
+Python 3.12+ 在 Windows 上改用 pymanager，官网不再提供传统安装包。用 `winget` 或直接下载 3.13 安装包：
+```powershell
+# 方式 1：winget
+winget install Python.Python.3.13
+
+# 方式 2：直接下载
+curl.exe -L -o C:\Temp\python-installer.exe "https://www.python.org/ftp/python/3.13.3/python-3.13.3-amd64.exe"
+Start-Process C:\Temp\python-installer.exe -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
+```
+
+#### 完整安装步骤
+
+```powershell
+# 1. 安装 Python 3.13（勾选 Add to PATH）
+winget install Python.Python.3.13
+# 重开 PowerShell 让 PATH 生效
+
+# 2. 安装 Git
+curl.exe -L -o C:\Temp\git-installer.exe "https://github.com/git-for-windows/git/releases/download/v2.48.1.windows.1/Git-2.48.1-64-bit.exe"
+Start-Process C:\Temp\git-installer.exe -ArgumentList "/VERYSILENT /NORESTART" -Wait
+# 重开 PowerShell
+
+# 3. 克隆 NitroGen 并安装（会自动触发 ViGEmBus 安装）
+git clone https://github.com/MineDojo/NitroGen.git
+cd NitroGen
+pip install -e ".[play]"
+# 弹出 ViGEmBus 安装向导，点 Next → Finish
+# 重启
+
+# 4. 安装 Steam + 下载游戏
+# 安装 Steam → 登录 → 下载游戏
+
+# 5. 启动游戏 → 手动操作到实际游戏画面 → 运行 play.py
+python scripts/play.py --host '<推理服务器内网IP>' --process "Brawlhalla.exe"
+```
+
+### 网络配置
+
+两台实例必须在 **同一个 VPC** 中。推理服务器安全组需要开放：
+
+| 端口 | 协议 | 来源 | 用途 |
+|------|------|------|------|
+| 5555 | TCP | VPC CIDR（如 `172.31.0.0/16`）| ZeroMQ 推理通信 |
+| 22 | TCP | 你的 IP | SSH |
+
+Windows 实例安全组需要开放：
+
+| 端口 | 协议 | 来源 | 用途 |
+|------|------|------|------|
+| 3389 | TCP | 你的 IP | RDP 远程桌面 |
+| 8443 | TCP | 你的 IP | NICE DCV 远程桌面（推荐） |
+
+> ⚠️ **安全组 CIDR 写错是最隐蔽的坑**：我们实测时 5555 端口的来源写成了 `173.31.0.0/16`（多了个 3），导致跨机器 ZMQ 连接超时，但 localhost 测试正常。
+
+### 实测结果
+
+**测试游戏**：Brawlhalla（免费 2D 格斗平台游戏，不在 NitroGen 训练集中）
+
+| 阶段 | 模型表现 |
+|------|---------|
+| 菜单/大厅 | ❌ 乱按（预期行为，菜单不在训练数据中）|
+| 实际战斗 | ⚠️ 能移动和跳跃，但无法有效攻击对手 |
+
+这个结果符合预期：
+1. **Brawlhalla 不在训练集中** — 模型是"零样本"泛化，表现有限
+2. **模型只看最后一帧** — 格斗游戏需要判断对手位置和出招时机，System-1 模型做不到
+3. **菜单乱按是正常的** — 需要人工先操作到实际游戏画面，再让 AI 接管
+
+**关键发现**：
+- 推理服务器 GPU 占用极低（2.3 GB / 48 GB），g4dn.xlarge 就完全够用
+- 整条 pipeline 延迟可接受，ZMQ 同 VPC 内网通信几乎无感
+- Windows Server 跑游戏可行但坑很多，建议用本地 Windows 10/11 桌面机更稳定
+
+### 推荐的测试游戏
+
+| 游戏 | 类型 | 价格 | NitroGen 预期表现 |
+|------|------|------|-----------------|
+| **Celeste** | 2D 平台跳跃 | $20 | ⭐⭐⭐ 论文主力测试，base model 能过关 |
+| **Hollow Knight** | 2D 动作冒险 | $15 | ⭐⭐⭐ 训练集中有大量数据 |
+| **Cuphead** | 2D 弹幕动作 | $20 | ⭐⭐ 代码里有专门的初始化逻辑 |
+| **The Binding of Isaac** | 俯视角 Roguelike | $15 | ⭐⭐ 代码里有专门适配 |
+| **Brawlhalla** | 2D 格斗 | 免费 | ⭐ 能跑通但表现一般 |
+
+### 成本参考
+
+| 资源 | 实例类型 | On-Demand 价格 | 备注 |
+|------|---------|---------------|------|
+| 推理服务器 | g6e.xlarge | ~$1.86/h | 大材小用，g4dn.xlarge ($0.526/h) 就够 |
+| 游戏客户端 | g4dn.xlarge | ~$0.71/h (Windows) | DCV AMI 自带 Gaming 驱动 |
+| **合计** | | **~$1.24/h**（优化后）| 用 Spot 可以更便宜 |
+
 ## 参考资源
 
 - 项目官网：https://nitrogen.minedojo.org/
