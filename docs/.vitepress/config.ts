@@ -12,7 +12,7 @@ export default defineConfig({
   ],
 
   themeConfig: {
-    siteTitle: 'Engineering Field Notes',
+    siteTitle: '🔬 Engineering Field Notes',
 
     nav: [
       { text: 'Home', link: '/' },
@@ -72,6 +72,7 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/tools/' },
             { text: 'MoneyPrinterV2', link: '/tools/MoneyPrinterV2' },
+            { text: 'AI Game DevTools — AI 游戏开发工具全景图', link: '/tools/ai-game-devtools' },
             { text: 'claude-hud', link: '/tools/claude-hud' },
             { text: 'Lightpanda Browser', link: '/tools/lightpanda-browser' },
             { text: 'worldmonitor', link: '/tools/worldmonitor' },
