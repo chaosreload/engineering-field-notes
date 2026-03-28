@@ -75,6 +75,7 @@ export default defineConfig({
             { text: 'MoneyPrinterV2', link: '/tools/MoneyPrinterV2' },
             { text: 'AI Game DevTools — AI 游戏开发工具全景图', link: '/tools/ai-game-devtools' },
             { text: 'claude-hud', link: '/tools/claude-hud' },
+            { text: 'last30days-skill', link: '/tools/last30days-skill' },
             { text: 'Lightpanda Browser', link: '/tools/lightpanda-browser' },
             { text: 'worldmonitor', link: '/tools/worldmonitor' },
           ]
