@@ -74,6 +74,7 @@ export default defineConfig({
             { text: 'Overview', link: '/tools/' },
             { text: 'MoneyPrinterV2', link: '/tools/MoneyPrinterV2' },
             { text: 'AI Game DevTools — AI 游戏开发工具全景图', link: '/tools/ai-game-devtools' },
+            { text: 'Claude Code — Source Code Deep Dive', link: '/tools/claude-code' },
             { text: 'claude-hud', link: '/tools/claude-hud' },
             { text: 'follow-builders', link: '/tools/follow-builders' },
             { text: 'last30days-skill', link: '/tools/last30days-skill' },
