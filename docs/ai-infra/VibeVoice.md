@@ -309,6 +309,13 @@ python demo/realtime_model_inference_from_file.py \
 > 测试环境：AWS g5.xlarge, NVIDIA A10G 24GB, Ubuntu 22.04, CUDA 12.9, Python 3.10
 > 测试日期：2026-04-01
 
+
+### 测试输入文本
+
+使用仓库自带的示例文本 `demo/text_examples/1p_vibevoice.txt`：
+
+> VibeVoice is a novel framework designed for generating expressive, long-form, multi-speaker conversational audio, such as podcasts, from text. It addresses significant challenges in traditional Text-to-Speech (TTS) systems, particularly in scalability, speaker consistency, and natural turn-taking. A core innovation of VibeVoice is its use of continuous speech tokenizers operating at an ultra-low frame rate of 7.5 Hz. These tokenizers efficiently preserve audio fidelity while significantly boosting computational efficiency for processing long sequences. VibeVoice employs a next-token diffusion framework, leveraging a Large Language Model to understand textual context and dialogue flow, and a diffusion head to generate high-fidelity acoustic details. The model can synthesize speech up to 90 minutes long with up to 4 distinct speakers, surpassing the typical 1-2 speaker limits of many prior models.
+
 ### Realtime TTS 0.5B 实测
 
 ```bash
@@ -386,6 +393,39 @@ text = processor.decode(output_ids[0], skip_special_tokens=True)
 ```
 
 > 🎯 ASR 完美识别了 TTS 生成的全部内容，时间戳精准，说话人标记正确。
+
+
+### TTS 生成音频
+
+TTS 生成了一段 57.6 秒的 Carter（男声）朗读音频。由于测试使用的临时 GPU 实例已 terminate，原始音频文件未保留。
+
+**复现方式**（只需要一张 A10G/RTX 3090 或更高的 GPU）：
+
+```bash
+git clone https://github.com/microsoft/VibeVoice.git && cd VibeVoice
+pip install -e ".[streamingtts]"
+python demo/realtime_model_inference_from_file.py \
+  --model_path microsoft/VibeVoice-Realtime-0.5B \
+  --txt_path demo/text_examples/1p_vibevoice.txt \
+  --speaker_name Carter \
+  --output_dir ./output
+# 输出：output/1p_vibevoice_generated.wav (57.6s, ~2.7MB)
+```
+
+### ASR 完整输出
+
+ASR 对 TTS 生成音频的完整转录结果（JSON 格式，含时间戳和说话人标记）：
+
+| 时间段 | 说话人 | 转录内容 |
+|--------|--------|----------|
+| 0.00 - 14.37s | Speaker 0 | Vive Voice is a novel framework designed for generating expressive, long-form, multi-speaker conversational audio, such as podcasts from text. It addresses significant challenges in traditional text-to-speech TTS systems. |
+| 14.40 - 27.80s | Speaker 0 | Particularly in scalability, speaker consistency, and natural turn-taking. A core innovation of Vive Voice is its use of continuous speech tokenizers operating at an ultra-low frame rate of seven point five Hertz. |
+| 28.05 - 35.88s | Speaker 0 | These tokenizers efficiently preserve audio fidelity while significantly boosting computational efficiency for processing long sequences. |
+| 36.26 - 48.41s | Speaker 0 | Vive Voice employs a next token diffusion framework, leveraging a large language model to understand textual context and dialogue flow. And a diffusion head to generate high-fidelity acoustic details. |
+| 48.72 - 57.60s | Speaker 0 | The model can synthesize speech up to ninety minutes long with up to four distinct speakers, surpassing the typical one-two speaker limits of many prior models. |
+
+> 🔍 **对比观察**：ASR 将数字 "7.5" 识别为 "seven point five"，"90" 识别为 "ninety"，"4" 识别为 "four"——因为 TTS 生成的是语音形式，ASR 按听到的音频转录。"VibeVoice" 被识别为 "Vive Voice"（连读听起来相似）。整体语义完全正确。
+
 
 ### 踩坑记录
 
