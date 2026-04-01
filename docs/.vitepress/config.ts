@@ -46,6 +46,7 @@ export default defineConfig({
             { text: 'VibeVoice', link: '/ai-infra/VibeVoice' },
             { text: 'e2b-dev/infra', link: '/ai-infra/infra' },
             { text: 'kiro-gateway', link: '/ai-infra/kiro-gateway' },
+            { text: 'kiro2api', link: '/ai-infra/kiro2api' },
             { text: 'zeroboot', link: '/ai-infra/zeroboot' },
           ]
         }
