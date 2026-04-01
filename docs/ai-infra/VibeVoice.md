@@ -397,9 +397,16 @@ text = processor.decode(output_ids[0], skip_special_tokens=True)
 
 ### TTS 生成音频
 
-TTS 生成了一段 57.6 秒的 Carter（男声）朗读音频。由于测试使用的临时 GPU 实例已 terminate，原始音频文件未保留。
+TTS 使用 Carter（男声）朗读上面的输入文本，生成了一段约 51 秒的音频：
 
-**复现方式**（只需要一张 A10G/RTX 3090 或更高的 GPU）：
+<audio controls>
+  <source src="/engineering-field-notes/audio/vibevoice-tts-carter-demo.wav" type="audio/wav">
+  Your browser does not support the audio element.
+</audio>
+
+📥 [下载音频文件](/engineering-field-notes/audio/vibevoice-tts-carter-demo.wav)（WAV, 2.4MB, ~51s）| 📄 [下载输入文本](/engineering-field-notes/audio/vibevoice-tts-input.txt)
+
+**生成命令**：
 
 ```bash
 git clone https://github.com/microsoft/VibeVoice.git && cd VibeVoice
@@ -409,7 +416,6 @@ python demo/realtime_model_inference_from_file.py \
   --txt_path demo/text_examples/1p_vibevoice.txt \
   --speaker_name Carter \
   --output_dir ./output
-# 输出：output/1p_vibevoice_generated.wav (57.6s, ~2.7MB)
 ```
 
 ### ASR 完整输出
