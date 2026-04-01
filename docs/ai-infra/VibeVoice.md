@@ -303,6 +303,99 @@ python demo/realtime_model_inference_from_file.py \
 
 ---
 
+
+## 实机 GPU 测试（A10G 24GB）
+
+> 测试环境：AWS g5.xlarge, NVIDIA A10G 24GB, Ubuntu 22.04, CUDA 12.9, Python 3.10
+> 测试日期：2026-04-01
+
+### Realtime TTS 0.5B 实测
+
+```bash
+pip install -e ".[streamingtts]"
+python demo/realtime_model_inference_from_file.py \
+  --model_path microsoft/VibeVoice-Realtime-0.5B \
+  --txt_path demo/text_examples/1p_vibevoice.txt \
+  --speaker_name Carter \
+  --output_dir /tmp/vibevoice_output
+```
+
+| 指标 | 数值 |
+|------|------|
+| 输入 text tokens | 174 |
+| 生成 speech tokens | 432 |
+| 音频时长 | 57.6 秒 |
+| 生成耗时 | 65.95 秒 |
+| RTF (Real Time Factor) | 1.14x |
+| GPU 显存占用 | ~4 GB |
+| Attention 实现 | SDPA（未装 flash_attn） |
+
+> 💡 未安装 `flash_attn`，自动 fallback 到 SDPA。安装 flash_attn 后 RTF 预计可降至 < 1.0x。
+
+### ASR 7B 实测（TTS→ASR 自我验证）
+
+用上面 TTS 生成的 57.6 秒音频作为 ASR 输入，验证"TTS 生成 → ASR 识别"闭环：
+
+```python
+from vibevoice.modular.modeling_vibevoice_asr import VibeVoiceASRForConditionalGeneration
+from vibevoice.processor.vibevoice_asr_processor import VibeVoiceASRProcessor
+import torch
+
+processor = VibeVoiceASRProcessor.from_pretrained(
+    "microsoft/VibeVoice-ASR",
+    language_model_pretrained_name="Qwen/Qwen2.5-7B"
+)
+model = VibeVoiceASRForConditionalGeneration.from_pretrained(
+    "microsoft/VibeVoice-ASR",
+    torch_dtype=torch.bfloat16, device_map="cuda",
+    attn_implementation="sdpa"
+)
+
+inputs = processor(
+    audio=["generated_audio.wav"],
+    return_tensors="pt",
+    add_generation_prompt=True
+).to("cuda")
+
+output_ids = model.generate(**inputs, max_new_tokens=4096)
+text = processor.decode(output_ids[0], skip_special_tokens=True)
+```
+
+| 指标 | 数值 |
+|------|------|
+| 输入音频时长 | 57.6 秒 |
+| 模型加载 GPU 显存 | 16,544 MB (16.5 GB) |
+| 推理耗时 | 165.6 秒 |
+| 输出格式 | JSON（Start, End, Speaker, Content） |
+
+**ASR 输出**（结构化转录）：
+
+```json
+[
+  {"Start":0.0, "End":14.37, "Speaker":0,
+   "Content":"Vive Voice is a novel framework designed for generating expressive, long-form, multi-speaker conversational audio, such as podcasts from text. It addresses significant challenges in traditional text-to-speech TTS systems."},
+  {"Start":14.4, "End":27.8, "Speaker":0,
+   "Content":"Particularly in scalability, speaker consistency, and natural turn-taking. A core innovation of Vive Voice is its use of continuous speech tokenizers operating at an ultra-low frame rate of seven point five Hertz."},
+  {"Start":28.05, "End":35.88, "Speaker":0,
+   "Content":"These tokenizers efficiently preserve audio fidelity while significantly boosting computational efficiency for processing long sequences."},
+  {"Start":36.26, "End":48.41, "Speaker":0,
+   "Content":"Vive Voice employs a next token diffusion framework, leveraging a large language model to understand textual context and dialogue flow. And a diffusion head to generate high-fidelity acoustic details."},
+  {"Start":48.72, "End":57.6, "Speaker":0,
+   "Content":"The model can synthesize speech up to ninety minutes long with up to four distinct speakers, surpassing the typical one-two speaker limits of many prior models."}
+]
+```
+
+> 🎯 ASR 完美识别了 TTS 生成的全部内容，时间戳精准，说话人标记正确。
+
+### 踩坑记录
+
+1. **torchaudio 未自动安装**：`pip install -e .` 不包含 torchaudio，ASR 推理需要手动 `pip install torchaudio`
+2. **flash_attn 非必须**：没安装时自动 fallback 到 SDPA，但可能影响音频质量和速度
+3. **ASR batch inference 脚本 bug**：transformers 4.51.3 下 `vibevoice_asr_inference_from_file.py` 有 JSON 序列化错误（`dtype` 对象不可序列化），直接用 Python API 调用无此问题
+4. **max_new_tokens 必须设置**：ASR generate 不设上限会导致末尾 token 退化（无限重复逗号/特殊字符）
+5. **A10G 24GB 刚好够**：ASR 7B bf16 占 16.5GB，推理时峰值约 20GB，不留太多余量
+
+
 ## 关键发现 / 学习心得
 
 ### 1. 7.5Hz 帧率是核心突破
