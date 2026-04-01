@@ -399,12 +399,9 @@ text = processor.decode(output_ids[0], skip_special_tokens=True)
 
 TTS 使用 Carter（男声）朗读上面的输入文本，生成了一段约 51 秒的音频：
 
-<audio controls>
-  <source src="/engineering-field-notes/audio/vibevoice-tts-carter-demo.wav" type="audio/wav">
-  Your browser does not support the audio element.
-</audio>
+🔊 **试听 TTS 生成音频**：[vibevoice-tts-carter-demo.wav](https://github.com/chaosreload/engineering-field-notes/raw/main/docs/public/audio/vibevoice-tts-carter-demo.wav)（WAV, 2.4MB, ~51s）
 
-📥 [下载音频文件](/engineering-field-notes/audio/vibevoice-tts-carter-demo.wav)（WAV, 2.4MB, ~51s）| 📄 [下载输入文本](/engineering-field-notes/audio/vibevoice-tts-input.txt)
+📄 **输入文本**：[vibevoice-tts-input.txt](https://github.com/chaosreload/engineering-field-notes/raw/main/docs/public/audio/vibevoice-tts-input.txt)
 
 **生成命令**：
 
