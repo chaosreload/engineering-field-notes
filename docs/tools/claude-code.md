@@ -494,3 +494,412 @@ Claude Code 在上下文管理上投入了大量工程：
 - [Ink — React for CLI](https://github.com/vadimdemedes/ink)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 - [Bun 文档](https://bun.sh/docs)
+
+---
+
+## BashTool 命令执行模块 — 深度分析
+
+> 补充分析日期：2026-04-01
+> 分析者：码虾（CodingClaw）
+> 源码路径：`src/tools/BashTool/`（15个文件，10,894 行）
+
+BashTool 是 Claude Code 最复杂也最危险的模块。Scout 的分析已指出它有 18 个子模块、多层安全架构。本节从源码角度做逐层深挖。
+
+---
+
+### 一、命令如何构建
+
+#### 1.1 从 LLM 输入到执行参数
+
+LLM 通过 `tool_use` 响应传入命令，Schema 定义（`BashTool.tsx`）：
+
+```typescript
+// Zod schema — LLM 必须遵守这个格式
+const inputSchema = z.object({
+  command: z.string(),           // 要执行的 shell 命令
+  timeout: z.number().optional(), // 超时毫秒数（可选）
+  description: z.string().optional(), // 人类可读描述（可选）
+})
+```
+
+`command` 是纯字符串，Claude 模型根据 system prompt 中的工具描述来决定填什么。
+
+#### 1.2 System Prompt 中的命令构建指引
+
+`src/tools/BashTool/prompt.ts` 定义了 BashTool 的完整提示词：
+
+```typescript
+// 核心约束（精简）
+- 始终使用 set -e, set -o pipefail 等安全选项
+- 不要使用 sudo（除非明确被要求）
+- 优先使用绝对路径
+- 长时间运行的命令必须加 timeout 参数
+- 不要在后台运行（& 后台）除非明确要求
+```
+
+关键设计：**LLM 被训练成倾向于构建"保守"命令**——加 timeout、避免 sudo、不乱写文件，而非通过安全检查强制。模型自律 + 技术防护双层。
+
+#### 1.3 命令的超时控制
+
+```typescript
+// prompt.ts
+export function getDefaultTimeoutMs(): number {
+  return 120_000  // 默认 2 分钟
+}
+
+export function getMaxTimeoutMs(): number {
+  return 600_000  // 最大 10 分钟
+}
+```
+
+超时后进程被 SIGTERM，再等 5 秒后 SIGKILL。
+
+---
+
+### 二、命令如何执行
+
+#### 2.1 执行路径：Shell.ts
+
+最终执行走 `src/utils/Shell.ts`，底层调用 Node.js `child_process.spawn`：
+
+```typescript
+// Shell.ts — 核心执行逻辑
+import { spawn } from 'child_process'
+
+// 执行环境选择
+export async function findSuitableShell(): Promise<string> {
+  // 优先级：CLAUDE_CODE_SHELL 环境变量 > bash > zsh > sh
+  const shellOverride = process.env.CLAUDE_CODE_SHELL
+  if (shellOverride && isExecutable(shellOverride)) return shellOverride
+  // ... 查找 bash/zsh
+}
+```
+
+**关键设计**：命令通过 `spawn(shell, ['-c', command])` 执行，而非 `exec()`。这避免了命令行长度限制（exec 在 Linux 上是 2MB，但 spawn+shell 没有这个限制）。
+
+#### 2.2 沙箱化执行路径
+
+当 `shouldUseSandbox()` 返回 true 时，走 `SandboxManager`：
+
+```
+macOS     → 系统级 sandbox-exec（Apple sandbox profiles）
+Linux     → seccomp + namespace 隔离（或降级为无沙箱）
+```
+
+`shouldUseSandbox.ts` 的决策逻辑：
+```
+1. SandboxManager.isSandboxingEnabled() 为 true
+2. 且 NOT dangerouslyDisableSandbox（用户未手动关闭）
+3. 且 NOT 命令在 excludedCommands 列表中（用户配置）
+```
+
+#### 2.3 工作目录管理
+
+BashTool 维护一个 session 级别的 `cwd` 状态。注意 `cd` 命令的特殊处理：
+
+```typescript
+// BashTool.tsx
+if (commandHasAnyCd(command)) {
+  // cd 命令需要特殊处理：在 BashTool 进程里执行 cd 并更新 cwd 状态
+  // 因为 spawn 的子进程 cd 不会影响父进程的工作目录
+  const newCwd = await resolveCdCommand(command, currentCwd)
+  setCwdState(newCwd)  // 更新全局 cwd
+}
+```
+
+#### 2.4 输出处理
+
+- stdout/stderr 通过流式读取，实时渲染到 Ink UI
+- 输出截断：单条命令最大 `TOOL_SUMMARY_MAX_LENGTH`（防止上下文爆炸）
+- 图片输出检测：`isImageOutput()` — 如果 stdout 是图片（PNG/JPEG），走 base64 编码路径返回图片给 LLM
+
+---
+
+### 三、安全管控：五层防御体系
+
+这是本节的核心。BashTool 的安全架构是 **Defense in Depth（纵深防御）**，没有任何单一检查点是完全可信的。
+
+```
+用户输入
+   │
+   ▼
+[Layer 1] Mode Validation     — 当前 Permission Mode 允许执行吗？
+   │
+   ▼
+[Layer 2] Deny Rules          — 全局/工具级禁止规则命中了吗？
+   │
+   ▼
+[Layer 3] Syntax Security     — 命令本身有没有危险语法？（23 项检查）
+   │
+   ▼
+[Layer 4] Semantic Security   — 路径/行为语义是否安全？
+   │
+   ▼
+[Layer 5] Runtime Sandbox     — 运行时进程级别隔离
+```
+
+---
+
+#### Layer 1：Permission Mode 检查（modeValidation.ts）
+
+```typescript
+// 四种模式
+type PermissionMode =
+  | 'default'     // 每次询问用户
+  | 'plan'        // 计划模式（只读）
+  | 'auto'        // 分类器自动审批
+  | 'bypassPermissions'  // 跳过所有检查（！高危！）
+```
+
+`plan` 模式下 BashTool 直接走 `checkReadOnlyConstraints`，任何写操作都会被拒绝。
+
+---
+
+#### Layer 2：Deny Rules + Allow Rules 系统（bashPermissions.ts）
+
+这是 2621 行的核心文件。规则系统设计精妙：
+
+**规则格式**（`PermissionRule`）：
+```
+Bash(git commit:*)           → 前缀匹配，允许所有 git commit 子命令
+Bash(rm -rf /tmp/*)          → 通配符匹配
+Bash(curl https://api.com)   → 精确匹配
+```
+
+**规则匹配核心逻辑**——`stripSafeWrappers()`：
+```typescript
+// 在匹配规则前，先剥离"安全包装命令"，防止规则被绕过
+// 例如：timeout 30 git commit → git commit（timeout 是安全包装）
+// 安全包装：timeout, env -i, nice, nohup, stdbuf 等
+const SAFE_WRAPPER_PATTERNS = [
+  /^timeout\s+\d+\s+/,
+  /^env\s+/,
+  /^nice\s+/,
+  // ...
+]
+```
+
+**关键安全考量**：规则匹配前还要剥离 env var 赋值（`FOO=bar cmd` → `cmd`），防止 `FOO=bar bash -c evil` 绕过 `bash:*` 拒绝规则。
+
+**BINARY_HIJACK_VARS 保护**：
+```typescript
+// 这些环境变量可以劫持 PATH，被列为"不安全 env var"
+const BINARY_HIJACK_VARS = new Set(['PATH', 'LD_PRELOAD', 'LD_LIBRARY_PATH', ...])
+// 包含这些变量的命令，不走"剥离 env var"的快捷路径，强制 ask
+```
+
+---
+
+#### Layer 3：Syntax Security（bashSecurity.ts）—— 最核心
+
+这是 2592 行的安全检查引擎，包含 **23 项独立安全检查**，分两条路径：
+
+```
+Tree-sitter 可用 → bashCommandIsSafeAsync（AST 级别分析）
+Tree-sitter 不可用 → bashCommandIsSafe_DEPRECATED（正则 + shell-quote）
+```
+
+**设计哲学**：两个解析器（shell-quote 和 bash）对同一命令的解析可能存在差异（misparsing），攻击者可利用这种差异绕过安全检查。大量检查专门针对这类 **parser differential attack**。
+
+**23 项检查清单**（按源码顺序）：
+
+| ID | 检查名 | 防御目标 |
+|----|--------|---------|
+| 1 | `validateIncompleteCommands` | 阻止以 `-`、`&&` 开头的片段命令 |
+| 2 | `validateSafeCommandSubstitution` | 允许 `$(cat <<'EOF'...EOF)` 安全 heredoc，阻止其他 `$()` |
+| 3 | `validateGitCommit` | 允许简单 git commit，阻止消息中的 `$()` 和链式命令 |
+| 4 | `validateJqCommand` | 阻止 `jq system()`（任意命令执行）和 `-f --from-file` |
+| 5 | `validateObfuscatedFlags` | 阻止 `"-"exec`、`"--"output` 等引号混淆 flag |
+| 6 | `validateShellMetacharacters` | 阻止参数中的 `;`、`|`、`&` |
+| 7 | `validateDangerousVariables` | 阻止 `$VAR \| cmd`、`> $VAR` 等危险变量用法 |
+| 8 | `validateCommentQuoteDesync` | 阻止 `# '` 注释中的引号（会 desync quote tracker）|
+| 9 | `validateQuotedNewline` | 阻止引号内换行 + `#` 开头的下一行（隐藏参数）|
+| 10 | `validateCarriageReturn` | 阻止 `\r`（shell-quote vs bash 解析差异）|
+| 11 | `validateNewlines` | 阻止未转义换行（多命令注入）|
+| 12 | `validateIFSInjection` | 阻止 `$IFS` 操控（绕过正则验证）|
+| 13 | `validateProcEnvironAccess` | 阻止 `/proc/*/environ` 读取（API key 泄露）|
+| 14 | `validateDangerousPatterns` | 阻止 `$()`、反引号、`${}`、进程替换 `<()`、Zsh 特殊语法 |
+| 15 | `validateRedirections` | 阻止 `<`（读敏感文件）和 `>`（写任意文件）|
+| 16 | `validateBackslashEscapedWhitespace` | 阻止 `echo\ test` 路径遍历 |
+| 17 | `validateBackslashEscapedOperators` | 阻止 `\;`（splitCommand 归一化后暴露 `;`）|
+| 18 | `validateUnicodeWhitespace` | 阻止 Unicode 空白字符（`\u00A0` 等）|
+| 19 | `validateMidWordHash` | 阻止 `foo#bar`（shell-quote vs bash `#` 注释处理差异）|
+| 20 | `validateBraceExpansion` | 阻止 `{a,b}` brace expansion 绕过 allowlist |
+| 21 | `validateZshDangerousCommands` | 阻止 `zmodload`、`zpty`、`ztcp`、`fc -e` 等 Zsh 危险命令 |
+| 22 | `validateMalformedTokenInjection` | 阻止 `{hi:"hi;evil}` 等畸形 token + 命令分隔符 |
+| - | Control Characters | 最先检查：阻止 `\x00`-`\x08`、`\x0B`-`\x1F`（控制字符绕过）|
+| - | SingleQuote Backslash Bug | shell-quote 单引号 `\'` 解析 bug 防护 |
+
+**最有价值的安全洞见**——`BASH_SECURITY_CHECK_IDS`：
+每个检查都有一个数字 ID（而非字符串），触发时上报 `tengu_bash_security_check_triggered` 遥测。Anthropic 在生产中实时监控哪个 ID 被触发最多，持续改进安全策略。
+
+---
+
+#### Layer 4：Semantic Security
+
+**4a. pathValidation.ts（1303行）**
+
+针对文件路径命令（`rm`/`cp`/`mv`/`cat`/`git` 等 25 种）做路径验证：
+
+```typescript
+// 核心：isDangerousRemovalPath() 检查
+// 永久硬拒绝的路径（即使有 allowlist 规则也不行）：
+const ALWAYS_DANGEROUS_PATHS = [
+  '/', '/etc', '/usr', '/bin', '/sbin', '/lib',
+  '/var', '/tmp',  // /tmp 也保护！
+  '/home',         // 整个 home 目录
+  // macOS 特有
+  '/System', '/Library', '/Applications',
+  // ...
+]
+```
+
+**路径规范化**：所有路径经过 `expandTilde()` 和 `path.resolve()` 后验证，防止 `../../` 路径遍历。
+
+**4b. readOnlyValidation.ts（1990行）**
+
+在 plan 模式和 auto 模式的 read-only 约束下，分析命令是否真的只读：
+
+```typescript
+// 判断命令是否为只读操作（自动允许）
+function isCommandReadOnly(command: string): boolean {
+  const readOnlyCommands = new Set(['cat', 'ls', 'grep', 'find', 'head', 'tail', 
+    'wc', 'stat', 'git log', 'git diff', 'git status', ...])
+  // ...
+}
+```
+
+**4c. destructiveCommandWarning.ts**
+
+不影响权限决策，纯粹的**告知性警告**：
+
+```typescript
+const DESTRUCTIVE_PATTERNS = [
+  { pattern: /\bgit reset --hard\b/, warning: 'Note: may discard uncommitted changes' },
+  { pattern: /\brm -[a-z]*r[a-z]*f\b/, warning: 'Note: may recursively force-remove files' },
+  { pattern: /\bkubectl delete\b/, warning: 'Note: may delete Kubernetes resources' },
+  { pattern: /\bterraform destroy\b/, warning: 'Note: may destroy Terraform infrastructure' },
+  // git push --force, git clean -f, DROP TABLE/DATABASE...
+]
+```
+
+**4d. sedValidation.ts（684行）**
+
+`sed` 命令的专项深度解析——因为 sed 可以写文件（`sed -i`），需要单独验证：
+
+```typescript
+// sed -i（in-place edit）的写路径验证
+// 解析 sed 的 address（行范围）、command（s/替换/etc）、flag（-i/-n 等）
+// 验证写入路径是否在允许的目录内
+```
+
+---
+
+#### Layer 5：Runtime Sandbox（shouldUseSandbox.ts）
+
+运行时的最后防线，macOS 上使用 Apple 的 `sandbox-exec`：
+
+```
+命令执行前 → shouldUseSandbox() 判断 → 是 → SandboxManager.run(command, sandboxProfile)
+                                       ↓ 否
+                                  直接 spawn
+```
+
+沙箱的 excludedCommands 机制：用户可以配置某些命令不走沙箱（比如 bazel，因为构建系统需要访问系统资源）。但这是**用户配置的便利功能，不是安全边界**——源码注释明确写着 `// NOTE: excludedCommands is a user-facing convenience feature, not a security boundary.`
+
+---
+
+### 四、Bash 分类器（BASH_CLASSIFIER feature flag）
+
+在 `auto` 模式下，Layer 3 通过后还有一个**分类器自动审批**步骤：
+
+```typescript
+// bashPermissions.ts
+if (isClassifierPermissionsEnabled()) {
+  const classifierResult = await classifyBashCommand(command)
+  // classifierResult: { behavior: 'allow' | 'ask' | 'deny', confidence: number }
+  if (classifierResult.behavior === 'allow' && classifierResult.confidence > threshold) {
+    return { behavior: 'allow', source: 'classifier' }
+  }
+}
+```
+
+这个分类器是 Anthropic 训练的专门模型（或规则引擎），用来判断命令在当前上下文是否安全。目前是实验性功能（`BASH_CLASSIFIER` feature flag）。
+
+---
+
+### 五、命令语义解析（commandSemantics.ts）
+
+一个容易被忽视但有价值的设计：不同命令有不同的"成功"定义：
+
+```typescript
+// grep 返回 1 不是错误（只是没找到）
+// diff 返回 1 不是错误（只是有差异）
+// find 返回 1 不是错误（部分目录无权限）
+const COMMAND_SEMANTICS = new Map([
+  ['grep', (exitCode) => ({ isError: exitCode >= 2, message: exitCode === 1 ? 'No matches' : undefined })],
+  ['diff', (exitCode) => ({ isError: exitCode >= 2, message: exitCode === 1 ? 'Files differ' : undefined })],
+  ['find', (exitCode) => ({ isError: exitCode >= 2 })],
+  // ...
+])
+```
+
+这让 LLM 不会因为 `grep` 没找到内容就认为"命令执行失败"，避免不必要的重试循环。
+
+---
+
+### 六、关键安全洞见 & 工程教训
+
+#### 1. Parser Differential 是 AI Agent 安全的核心威胁
+
+Claude Code 的安全检查器用的是 JavaScript 的 shell-quote 库解析命令，而实际执行是 bash。这两者对同一字符串的解析存在系统性差异：
+
+| 字符 | shell-quote 解析 | bash 实际行为 |
+|------|----------------|--------------|
+| `\r`（CR） | 视为词分隔符 | 不在 IFS 中，视为字面量 |
+| `\` 在 `'...'` 中 | 触发转义 | 字面量 |
+| `mid#word` | `#` 开始注释 | `#` 是字面量 |
+| `{a,b}` brace expansion | 视为字面量 | 展开为多个参数 |
+
+**攻击链路**：利用解析差异 → 构造在 shell-quote 解析时看起来"无害"但 bash 实际执行危险操作的命令。
+
+`isBashSecurityCheckForMisparsing: true` 标记的检查（17项）会在 `bashPermissions.ts` 的早期门关处直接 block，**不允许走分类器自动审批**——因为这类检查的本质是"我们无法准确分析这个命令"，自动审批在此不安全。
+
+#### 2. Tree-sitter 是升级路径
+
+源码注释里有大量 `@deprecated Legacy regex/shell-quote path. Only used when tree-sitter is unavailable.`。Anthropic 正在把解析层从 shell-quote 迁移到 tree-sitter（一个成熟的增量解析器），可以生成精确的 AST，消除 parser differential 问题。tree-sitter 路径提供 `TreeSitterAnalysis`，在 `ValidationContext` 中传递给每个验证器，允许跳过某些纯正则的误判（如 `validateBackslashEscapedOperators` 可以用 AST 直接判断 `\;` 是参数还是运算符）。
+
+#### 3. "允许一次" vs "永久允许" 的规则存储
+
+用户在权限弹窗点"Yes, always allow"时，会将规则写入持久化配置（`.claude/settings.json` 或用户级配置）。规则的建议由 `getSimpleCommandPrefix()` 生成——倾向于建议 `git commit:*` 而非精确命令，平衡安全与便利。
+
+化合物命令（`&&` 链）最多建议 5 条规则（`MAX_SUGGESTED_RULES_FOR_COMPOUND = 5`），防止单次操作保存过多权限。
+
+#### 4. 与 OpenClaw 对比
+
+| 维度 | Claude Code BashTool | OpenClaw exec tool |
+|------|---------------------|-------------------|
+| 安全检查层数 | 5层（mode→deny→syntax→semantic→sandbox） | exec allowlist（单层） |
+| Parser 分析 | tree-sitter AST + shell-quote 双引擎 | shell 直接执行 |
+| 沙箱 | macOS sandbox-exec，Linux namespace | 无（依赖 allowlist） |
+| 规则系统 | 通配符 Bash(cmd:*) + 精确匹配 | 命令级 allowlist |
+| 自动审批 | 分类器（实验性） | 无 |
+| 破坏性警告 | 独立模块，15种模式 | 无 |
+
+OpenClaw 的安全模型更简单——exec allowlist 是白名单制（不在列表的默认拒绝），而 Claude Code 是黑名单+规则制（默认允许，通过检查过滤）。两种思路各有取舍：**Claude Code 面向通用编程任务（必须足够灵活），OpenClaw 面向受控自动化（可以足够严格）**。
+
+---
+
+### 参考文件
+
+| 文件 | 行数 | 核心内容 |
+|------|------|---------|
+| `BashTool.tsx` | ~800 | 主实现，工具定义，执行入口 |
+| `bashSecurity.ts` | 2592 | 23项语法安全检查 |
+| `bashPermissions.ts` | 2621 | 权限规则系统，分类器集成 |
+| `pathValidation.ts` | 1303 | 路径语义验证 |
+| `readOnlyValidation.ts` | 1990 | 只读约束 |
+| `sedValidation.ts` | 684 | sed 专项验证 |
+| `shouldUseSandbox.ts` | 153 | 沙箱决策 |
+| `destructiveCommandWarning.ts` | 102 | 破坏性命令告警 |
+| `commandSemantics.ts` | 140 | 命令退出码语义 |
