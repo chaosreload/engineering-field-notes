@@ -80,6 +80,7 @@ export default defineConfig({
             { text: 'MoneyPrinterV2', link: '/tools/MoneyPrinterV2' },
             { text: 'OpenSpec', link: '/tools/OpenSpec' },
             { text: 'AI Game DevTools — AI 游戏开发工具全景图', link: '/tools/ai-game-devtools' },
+            { text: 'Cedar 策略语言入门', link: '/tools/cedar' },
             { text: 'Claude Code — Source Code Deep Dive', link: '/tools/claude-code' },
             { text: 'claude-howto', link: '/tools/claude-howto' },
             { text: 'claude-hud', link: '/tools/claude-hud' },
