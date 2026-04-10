@@ -35,6 +35,7 @@ export default defineConfig({
             { text: 'Project AIRI', link: '/ai-agents/airi' },
             { text: 'autoresearch', link: '/ai-agents/autoresearch' },
             { text: 'deepagents', link: '/ai-agents/deepagents' },
+            { text: 'hermes-agent', link: '/ai-agents/hermes-agent' },
             { text: 'oh-my-claudecode', link: '/ai-agents/oh-my-claudecode' },
           ]
         }
