@@ -86,6 +86,7 @@ export default defineConfig({
             { text: 'follow-builders', link: '/tools/follow-builders' },
             { text: 'last30days-skill', link: '/tools/last30days-skill' },
             { text: 'Lightpanda Browser', link: '/tools/lightpanda-browser' },
+            { text: 'OPA (Open Policy Agent)', link: '/tools/opa' },
             { text: 'OpenScreen', link: '/tools/openscreen' },
             { text: 'worldmonitor', link: '/tools/worldmonitor' },
           ]
