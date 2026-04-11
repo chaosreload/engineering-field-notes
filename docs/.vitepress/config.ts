@@ -92,6 +92,7 @@ export default defineConfig({
             { text: 'Lightpanda Browser', link: '/tools/lightpanda-browser' },
             { text: 'OPA (Open Policy Agent)', link: '/tools/opa' },
             { text: 'OpenScreen', link: '/tools/openscreen' },
+            { text: 'RTK (Rust Token Killer)', link: '/tools/rtk' },
             { text: 'worldmonitor', link: '/tools/worldmonitor' },
           ]
         }
