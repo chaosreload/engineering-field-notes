@@ -36,6 +36,7 @@ export default defineConfig({
             { text: 'autoresearch', link: '/ai-agents/autoresearch' },
             { text: 'deepagents', link: '/ai-agents/deepagents' },
             { text: 'hermes-agent', link: '/ai-agents/hermes-agent' },
+            { text: 'multica', link: '/ai-agents/multica' },
             { text: 'oh-my-claudecode', link: '/ai-agents/oh-my-claudecode' },
           ]
         }
