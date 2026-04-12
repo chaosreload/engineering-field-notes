@@ -48,6 +48,7 @@ export default defineConfig({
             { text: 'Overview', link: '/ai-infra/' },
             { text: 'E2B', link: '/ai-infra/E2B' },
             { text: 'VibeVoice', link: '/ai-infra/VibeVoice' },
+            { text: 'Google AI Edge Gallery', link: '/ai-infra/gallery' },
             { text: 'e2b-dev/infra', link: '/ai-infra/infra' },
             { text: 'kiro-gateway', link: '/ai-infra/kiro-gateway' },
             { text: 'kiro2api', link: '/ai-infra/kiro2api' },
