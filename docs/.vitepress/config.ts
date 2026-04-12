@@ -82,6 +82,7 @@ export default defineConfig({
             { text: 'MoneyPrinterV2', link: '/tools/MoneyPrinterV2' },
             { text: 'OpenSpec', link: '/tools/OpenSpec' },
             { text: 'AI Game DevTools — AI 游戏开发工具全景图', link: '/tools/ai-game-devtools' },
+            { text: 'andrej-karpathy-skills', link: '/tools/andrej-karpathy-skills' },
             { text: 'Cedar vs OPA：策略引擎深度对比', link: '/tools/cedar-vs-opa' },
             { text: 'Cedar 策略语言入门', link: '/tools/cedar' },
             { text: 'Claude Code — Source Code Deep Dive', link: '/tools/claude-code' },
