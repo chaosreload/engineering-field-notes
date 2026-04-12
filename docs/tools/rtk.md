@@ -272,3 +272,71 @@ RTK 已经有 OpenClaw 插件（`openclaw/` 目录），使用 `before_tool_call
 - **安装指南**：[INSTALL.md](https://github.com/rtk-ai/rtk/blob/master/INSTALL.md)
 - **故障排除**：[TROUBLESHOOTING.md](https://github.com/rtk-ai/rtk/blob/master/docs/TROUBLESHOOTING.md)
 - **Homebrew**：`brew install rtk`
+
+## 实测验证：RTK + Claude Code Token 消耗对比
+
+_测试日期：2026-04-12 | 测试环境：AWS EC2 (dev-server) | Claude Code 2.1.104 + Bedrock Opus_
+
+### 测试设计
+
+在 RTK 自己的 Rust 仓库上，让 Claude Code 完成一个真实编码任务：**添加 docker build 输出过滤模块**（读源码 → 写代码 → cargo check → cargo test → 修复 → 重复）。分别在启用和禁用 RTK hook 的条件下跑同一个 prompt，对比 token 消耗和费用。
+
+**测试 Prompt：**
+> Add docker build output filtering support to RTK. Look at how container.rs handles docker ps/images/logs, then add a DockerBuild variant that filters verbose build output (layer hashes, download progress, cache messages) into a compact summary showing only the final image tag and any errors. Include unit tests. Run cargo check and cargo test to verify everything compiles and passes.
+
+### 结果对比
+
+#### 总体数据
+
+| 指标 | ✅ 有 RTK | ❌ 无 RTK | 差异 |
+|------|-----------|-----------|------|
+| 总 Turns | 26 (max) | 26 (max) | 相同 |
+| 总耗时 | 240s | 295s | RTK 快 18% |
+| input_tokens | 10,185 | 586 | — |
+| cache_creation | 63,458 | 52,483 | +20.9% ⬆️ |
+| cache_read | 1,220,189 | 1,272,396 | -4.1% |
+| output_tokens | 12,611 | 13,907 | -9.3% |
+| **总费用** | **$1.373** | **$1.315** | **+4.4% ⬆️** |
+
+#### 早期单命令测试（参考）
+
+| 命令 | 原始输出 | RTK 输出 | 压缩率 |
+|------|----------|----------|--------|
+| `find` (全量文件) | 106,222 B | 909 B | 99.1% |
+| `cargo check` | 7,013 B | 2,696 B | 61.6% |
+| `git status` | 464 B | 134 B | 71.1% |
+
+### 关键发现
+
+**1. 单命令压缩效果显著，但端到端 session 费用基本持平**
+
+RTK 在单条命令上的压缩率确实惊人（`find` 压缩 99%），但在 Claude Code 的完整编码 session 中，这个优势被以下因素稀释：
+
+- Claude Code 的 Read/Write/Edit 工具不走 Bash，不经过 RTK
+- 中等规模项目的 cargo check/test 输出本身不算特别大（几 KB 级别）
+- RTK hook 的执行开销（rewrite 元数据 + 输出包装）会增加 context
+
+**2. Bedrock cache 计费放大了 overhead**
+
+RTK 改变了命令输出内容，导致 cache_creation tokens 增加 21%（63K vs 52K）。在 Bedrock 的计费模型下，cache_creation 比 cache_read 贵得多，这个差异被放大了。
+
+**3. 有趣的副作用：RTK 版本快了 18%**
+
+虽然费用略高，但 API 调用时间从 276s 降到 221s。压缩后的 context 减少了模型的处理时间，这在长 session 中可能更有实际价值（开发者等待时间更短）。
+
+### RTK 的真正甜区
+
+基于测试数据推断，RTK 的最大价值场景是：
+
+| 场景 | 预期效果 | 原因 |
+|------|----------|------|
+| 大型 monorepo（数千文件） | ⭐⭐⭐ 高 | `find`/`ls` 输出巨大，压缩率 99%+ |
+| 重编译项目（C++/大 Rust workspace） | ⭐⭐⭐ 高 | build log 几十~几百 KB |
+| CI 调试循环 | ⭐⭐ 中高 | 反复查看长测试输出 |
+| 中小型项目日常开发 | ⭐ 一般 | 输出本身不大，overhead 抵消收益 |
+
+### 建议
+
+- **保留 RTK hook**：不碍事，在遇到大输出时自动发挥作用
+- **对于 Bedrock 用户**：注意 cache 计费模型的影响，RTK 的"省 token"不等于"省钱"
+- **关注速度提升**：18% 的速度提升在长 session 中是实质性的开发体验改善
