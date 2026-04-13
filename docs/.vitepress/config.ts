@@ -84,6 +84,7 @@ export default defineConfig({
             { text: 'OpenSpec', link: '/tools/OpenSpec' },
             { text: 'AI Game DevTools — AI 游戏开发工具全景图', link: '/tools/ai-game-devtools' },
             { text: 'andrej-karpathy-skills', link: '/tools/andrej-karpathy-skills' },
+            { text: 'awesome-design-md', link: '/tools/awesome-design-md' },
             { text: 'Cedar vs OPA：策略引擎深度对比', link: '/tools/cedar-vs-opa' },
             { text: 'Cedar 策略语言入门', link: '/tools/cedar' },
             { text: 'Claude Code — Source Code Deep Dive', link: '/tools/claude-code' },
