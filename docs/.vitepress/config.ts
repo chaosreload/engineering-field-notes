@@ -91,6 +91,7 @@ export default defineConfig({
             { text: 'Claude Code — Source Code Deep Dive', link: '/tools/claude-code' },
             { text: 'claude-howto', link: '/tools/claude-howto' },
             { text: 'claude-hud', link: '/tools/claude-hud' },
+            { text: 'darwin-skill', link: '/tools/darwin-skill' },
             { text: 'follow-builders', link: '/tools/follow-builders' },
             { text: 'last30days-skill', link: '/tools/last30days-skill' },
             { text: 'Lightpanda Browser', link: '/tools/lightpanda-browser' },
