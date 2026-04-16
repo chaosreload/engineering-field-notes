@@ -40,6 +40,7 @@ export default defineConfig({
             { text: 'hermes-agent', link: '/ai-agents/hermes-agent' },
             { text: 'multica', link: '/ai-agents/multica' },
             { text: 'oh-my-claudecode', link: '/ai-agents/oh-my-claudecode' },
+            { text: 'OpenClaw', link: '/ai-agents/openclaw' },
           ]
         }
       ],
