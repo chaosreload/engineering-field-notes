@@ -54,6 +54,7 @@ export default defineConfig({
             { text: 'e2b-dev/infra', link: '/ai-infra/infra' },
             { text: 'kiro-gateway', link: '/ai-infra/kiro-gateway' },
             { text: 'kiro2api', link: '/ai-infra/kiro2api' },
+            { text: 'New API', link: '/ai-infra/new-api' },
             { text: 'TimesFM', link: '/ai-infra/timesfm' },
             { text: 'zeroboot', link: '/ai-infra/zeroboot' },
           ]
