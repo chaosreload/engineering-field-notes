@@ -51,6 +51,7 @@ export default defineConfig({
             { text: 'Overview', link: '/ai-infra/' },
             { text: 'E2B', link: '/ai-infra/E2B' },
             { text: 'VibeVoice', link: '/ai-infra/VibeVoice' },
+            { text: 'claude-mem：给 Claude Code 加一层会话记忆', link: '/ai-infra/claude-mem' },
             { text: 'Google AI Edge Gallery', link: '/ai-infra/gallery' },
             { text: 'e2b-dev/infra', link: '/ai-infra/infra' },
             { text: 'kiro-gateway', link: '/ai-infra/kiro-gateway' },
