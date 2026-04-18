@@ -41,6 +41,7 @@ export default defineConfig({
             { text: 'multica', link: '/ai-agents/multica' },
             { text: 'oh-my-claudecode', link: '/ai-agents/oh-my-claudecode' },
             { text: 'OpenClaw', link: '/ai-agents/openclaw' },
+            { text: 'OpenSRE：给 AI SRE Agent 配一套 SWE-bench 式的评测基建', link: '/ai-agents/opensre' },
           ]
         }
       ],
