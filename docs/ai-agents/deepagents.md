@@ -1,6 +1,6 @@
 # deepagents Getting Started
 
-> 整理日期：2026-03-23
+> 整理日期：2026-03-23（2026-04-20 补充三方对照 + 系列选型指引）
 > 仓库地址：https://github.com/langchain-ai/deepagents
 
 ## 项目简介
@@ -426,6 +426,42 @@ deepagents-acp 让 deepagents 可以作为后端接入任何 ACP 兼容的前端
 ---
 
 ---
+
+## 三方对照：claude-agent-sdk vs Strands vs deepagents
+
+> 系列补充（2026-04-20）：这是 Agent SDK 选型研究系列的第 3 篇，把三个目前最值得认真选型的 Python Agent 框架放在一起对照。
+
+### 一张表看清三者定位
+
+| 维度 | claude-agent-sdk-python | strands-agents/sdk-python | langchain-ai/deepagents |
+|---|---|---|---|
+| 出品方 | Anthropic 官方 | AWS 官方 | LangChain 官方 |
+| Stars / 版本 | 6.4K ⭐ / v0.1.63 | 5.67K ⭐ / v1.36.0 | 21.3K ⭐ / v0.5.3 |
+| 本质 | Claude Code CLI 的 Python 包装 | 自建 agent loop 的多模型框架 | 基于 LangGraph 的 batteries-included 框架 |
+| 核心架构 | Python → IPC → Node.js 子进程（CLI 跑 agent loop） | Python 原生 event loop + Model 抽象 | LangGraph graph + 中间件栈 + Backend 抽象 |
+| 支持模型 | 仅 Claude（通过 CLI） | Bedrock / Anthropic / OpenAI / Gemini / LiteLLM / Ollama / … 13 家 | 任意 tool-calling LLM（通过 LangChain model provider） |
+| 扩展机制 | Hooks + in-process MCP tools | `@tool` 装饰器 + Hooks + Plugins + MCP | Middleware 栈（每个能力是一个可插拔 middleware） |
+| Sandbox / 文件系统 | 继承 Claude Code 的工具（Read/Edit/Bash）无原生沙箱抽象 | 无内置沙箱抽象（依赖工具作者） | Backend 抽象：Filesystem / State / LocalShell / Modal / Daytona / Runloop |
+| 多 agent | 通过 subagents（CLI 层） | graph / swarm / a2a-server / agent-as-tool | SubAgentMiddleware（同步/异步 subagent） |
+| 可观测 | 依赖 Claude Code CLI 输出 | OpenTelemetry 原生（traces + metrics） | LangSmith 原生 |
+| 协议开放 | 私有（Claude Code 专属） | A2A server（对外暴露 agent） | ACP server（接任意 AI IDE） + JS/TS 版本 |
+| 跑起来的最小代码 | `query("hello")` | `Agent(...).invoke("hello")` | `create_deep_agent().stream(...)` |
+| 锁定程度 | 高（绑死 Claude Code 生态） | 低（换 model= 即可切供应商） | 中（绑 LangGraph 和 LangChain 生态） |
+
+### 一段话说清三条路线的思路差异
+
+- **claude-agent-sdk**：把 Claude Code 当"黑盒 agent runtime"卖给 Python 用户。你不负责 agent loop、工具执行、权限判定，这些都在 CLI 子进程里。适合"我就想把 Claude Code 嵌进 CI / Jupyter / FastAPI，不想自己做 agent"。
+- **Strands**：不押注任何一家模型，自己实现 agent loop + 统一 Model 抽象。核心假设是"model-driven tool use 是通用语言"。适合"要在多模型之间切换 / 要 AWS 官方背书 / 要 OpenTelemetry 可观测"。
+- **deepagents**：主张"通用 agent 想做深任务，必须同时具备规划、子 agent、文件系统、详细 prompt 四件套"。基于 LangGraph 把这套封死，同时保留 Middleware/Backend 两个扩展点。适合"要做类 Claude Code 的开源 coding agent / 要跑在远程沙箱 / 要 ACP 协议接入 IDE"。
+
+### 三者各自适合谁
+
+- 只想嵌入 Claude Code 能力 → **claude-agent-sdk-python**
+- 要在 AWS 上生产跑 agent，或需要多模型切换 → **strands-agents/sdk-python**
+- 要开箱即用的 coding/research agent，或想二次开发做类 Claude Code 的产品 → **langchain-ai/deepagents**
+
+一句话选型指引：**嵌入选 claude-agent-sdk，平台选 Strands，产品选 deepagents。**
+
 
 ## 下次可以试的方向
 
