@@ -281,7 +281,7 @@ Answer: ... (fiscal breakdown, Little Ice Age, Li Zicheng 1644 ...)
 | 维度 | claude-agent-sdk | **pydantic-ai** | strands-agents | deepagents | crewAI | adk-python |
 |------|---|---|---|---|---|---|
 | **主推者** | Anthropic | Pydantic | AWS | LangChain | CrewAI Inc | Google |
-| **GitHub stars** | ~5.6k | **16.5k** | ~4.6k | ~5.4k | ~43k | ~18k |
+| **GitHub stars** | ~5.6k | **16.5k** | ~4.6k | ~21.3k | ~49.3k | ~18k |
 | **定位** | Claude Code 的 Python 壳 | **通用轻量 + 类型安全信仰** | 通用轻量 + AWS 绑定 | LangGraph 上的"深度思考"模板 | 多 agent 协作"团队"编排 | Google 全家桶 agent 平台 |
 | **Hello World 行数** | ~5 行 | **~5 行** | ~10 行 | ~15 行 | ~25 行（Agent + Task + Crew） | ~15 行 |
 | **Type safety** | 弱（依赖 dict schema） | **🌟 最强：泛型 `Agent[DepsT, OutputT]` + strict mypy 过关** | 中（TypedDict） | 弱（LangChain 世界观） | 弱 | 中（pydantic 模型） |
