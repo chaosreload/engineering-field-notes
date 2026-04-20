@@ -36,6 +36,7 @@ export default defineConfig({
             { text: 'Project AIRI', link: '/ai-agents/airi' },
             { text: 'autoresearch', link: '/ai-agents/autoresearch' },
             { text: 'awesome-ai-ideas', link: '/ai-agents/awesome-ai-ideas' },
+            { text: 'claude-agent-sdk-python', link: '/ai-agents/claude-agent-sdk-python' },
             { text: 'deepagents', link: '/ai-agents/deepagents' },
             { text: 'hermes-agent', link: '/ai-agents/hermes-agent' },
             { text: 'multica', link: '/ai-agents/multica' },
