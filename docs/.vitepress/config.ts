@@ -46,6 +46,7 @@ export default defineConfig({
             { text: 'oh-my-claudecode', link: '/ai-agents/oh-my-claudecode' },
             { text: 'OpenClaw', link: '/ai-agents/openclaw' },
             { text: 'OpenSRE：给 AI SRE Agent 配一套 SWE-bench 式的评测基建', link: '/ai-agents/opensre' },
+            { text: 'pydantic/pydantic-ai Study Notes', link: '/ai-agents/pydantic-ai' },
             { text: 'strands-agents/sdk-python', link: '/ai-agents/strands-agents-sdk-python' },
           ]
         }
@@ -56,6 +57,7 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/ai-infra/' },
             { text: 'E2B', link: '/ai-infra/E2B' },
+            { text: 'OmniVoice', link: '/ai-infra/OmniVoice' },
             { text: 'Pixelle-Video', link: '/ai-infra/Pixelle-Video' },
             { text: 'VibeVoice', link: '/ai-infra/VibeVoice' },
             { text: 'claude-mem：给 Claude Code 加一层会话记忆', link: '/ai-infra/claude-mem' },
