@@ -60,6 +60,7 @@ export default defineConfig({
             { text: 'OmniVoice', link: '/ai-infra/OmniVoice' },
             { text: 'Pixelle-Video', link: '/ai-infra/Pixelle-Video' },
             { text: 'VibeVoice', link: '/ai-infra/VibeVoice' },
+            { text: 'claude-context', link: '/ai-infra/claude-context' },
             { text: 'claude-mem：给 Claude Code 加一层会话记忆', link: '/ai-infra/claude-mem' },
             { text: 'Google AI Edge Gallery', link: '/ai-infra/gallery' },
             { text: 'e2b-dev/infra', link: '/ai-infra/infra' },
