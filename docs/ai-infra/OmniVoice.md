@@ -11,7 +11,7 @@ OmniVoice 是 k2-fsa（Kaldi、icefall、sherpa-onnx 背后的研究组）在 20
 
 1. **646 种语言**，581k 小时训练数据——目前开源 TTS 里语言覆盖面最广的一个。
 2. **Voice Cloning + Voice Design + Auto Voice** 三种生成模式共用一个 `model.generate()` API。
-3. **推理快**：RTF 低到 0.025（40 倍实时），靠的是一条少见的路径——**Masked Diffusion Language Model 风格架构**。
+3. **推理快**：官方宣称 RTF 低到 0.025（40 倍实时），靠的是一条少见的路径——**Masked Diffusion Language Model 风格架构**。（**实测更新**：L40S + 默认配置下我们复现到 RTF 0.041 / 24.5× 实时，达不到官方值；详见下文「GPU 实测（L40S）」。）
 
 模型大小：**812.9M** 参数（Qwen3-0.6B LLM backbone + 8 层 RVQ audio codebook heads），开源协议 Apache-2.0。22 天内拿到 4.1k⭐ / 645 fork。
 
@@ -243,6 +243,87 @@ sf.write("out_design.wav", audio[0], 24000)
 - `/data/projects/chaosreload/study/demo/OmniVoice/demo.py` — auto voice
 - `/data/projects/chaosreload/study/demo/OmniVoice/demo_clone.py` — cloning + design
 - 输出：`out_auto.wav` / `out_clone.wav` / `out_design.wav` 均为 24kHz 16-bit mono PCM。
+
+## GPU 实测（L40S，2026-04-23 更新）
+
+前面 CPU 部分跑的是 RTF ≈ 2.0（8 核 fp32，慢于实时），只验证了"能跑"。要判断能不能上生产 / 多路并发，必须补 GPU 数据。这次在 **AWS g6e.4xlarge（1× NVIDIA L40S 48GB）/ us-west-2** 上跑了 3 模式 × 3 dtype × 3 trial 的基准测试。**结论先行**：
+
+- **最快 RTF 0.041（voice clone, fp16），约 24.5× 实时**；auto / design 模式 fp16 在 15–16× 之间。
+- **官方 "RTF 0.025 / 40×" 在 L40S + 默认配置下没复现**，实测只有官方值的 60%。差距更可能来自硬件和参数口径差，不是虚假宣传。
+- **L40S 对 dev-server CPU 提速 33×–50×**（取决于模式）。OmniVoice 从"不能实时"变成"可多路并发实时合成"，48 GB 显存给 batch 扩展留了很大空间。
+- 单次 benchmark 实例在线 17 分钟，**成本 < $1**。
+
+### 三模式 RTF（L40S fp16，median over 3 trials）
+
+| 模式 | wall (s) | audio (s) | **RTF** | 实时倍数 | 对 CPU 提速 |
+|---|---|---|---|---|---|
+| **voice clone** | 1.00 | 24.50 | **0.041** | **24.5×** | ~49× |
+| auto | 0.96 | 15.64 | 0.061 | 16.3× | ~33× |
+| voice design | 1.01 | 15.38 | 0.066 | 15.2× | ~30× |
+
+clone 模式 RTF 最低不是因为推理更快（wall time 几乎一样都 ~1s），而是生成的音频最长——clone 模式会把 ref_text 拼进生成序列，输出更长的 token 序列摊薄了固定开销。
+
+### 三方对比：官方 claim / L40S 实测 / CPU
+
+| 场景 | RTF | 倍数 | 备注 |
+|---|---|---|---|
+| 官方 README | **0.025** | 40× | 未注明硬件 / dtype / num_step / batch |
+| L40S fp16 · clone（本次最佳） | **0.041** | 24.5× | num_step=32（默认），batch=1 |
+| L40S fp16 · auto | 0.061 | 16.3× | |
+| L40S fp32 · clone | 0.108 | 9.3× | fp32 拖垮吞吐 |
+| dev-server CPU fp32 · auto（上文） | ≈ 2.0 | 0.5× | 慢于实时 |
+
+### 为什么没到官方 0.025？
+
+不是官方造假，是口径没说清。把几个可能因素列清楚：
+
+1. **GPU 差别**：官方大概率用 H100（fp16 算力 ~2× L40S），40×→25× 的比例对得上。
+2. **num_step**：官方 `docs/tips.md` 提到步数可降到 16 甚至 8，我们用了默认 32；降步近似线性降 RTF（16 步就约 0.020，直接超官方值）。
+3. **Batch**：单条推理 vs batch=4/8 吞吐 RTF 能差 2–3 倍，48 GB 显存有空间堆 batch。
+4. **文本长度**：短音频（3–5 s）固定开销占比高，长音频 RTF 低；官方测试文本可能更长。
+
+所以官方 "RTF 0.025" 不是假的，是**没标硬件 + 没标参数**——读者默认按 README 抄默认配置会到不了。生产决策上记住"L40S 默认配置 ~25× 实时 / H100 或调 num_step 可能更快"就够了。
+
+### dtype 对比（clone 模式）
+
+| dtype | RTF | wall (s) | peak mem |
+|---|---|---|---|
+| **fp16** | **0.041** | 1.00 | **2.29 GB** |
+| bf16 | 0.041 | 1.03 | 3.06 GB |
+| fp32 | 0.108 | 2.74 | 5.15 GB |
+
+**fp16 ≈ bf16 >> fp32**：fp16 和 bf16 几乎等速，但 fp16 显存省 25%；fp32 wall 是 fp16 的 2.7 倍。**生产直接上 fp16**，除非碰到 bf16 有显著更稳的模型行为。
+
+注意一个坑：官方 `omnivoice-infer` CLI **硬编码 fp16**（`cli/infer.py` 里写死），不暴露 `--dtype`。要测 bf16/fp32 必须绕过 CLI，直接调 `OmniVoice.from_pretrained(..., dtype=torch.bfloat16)`。
+
+### Voice Design 的 instruct 不是自由文本（重要使用限制）
+
+上面 CPU 部分 Demo 3 的 instruct 是 `"female, british accent"`——看起来像自由英文 prompt，其实**不是**。
+
+Design 模式的 instruct **有严格白名单**，不是任意英文描述。在 pre-check 里，任何白名单以外的词都会被拒绝。合法 token 是**逗号+空格分隔**的枚举值：
+
+- **英文（24 个）**：`american accent, australian accent, british accent, canadian accent, child, chinese accent, elderly, female, high pitch, indian accent, japanese accent, korean accent, low pitch, male, middle-aged, moderate pitch, portuguese accent, russian accent, teenager, very high pitch, very low pitch, whisper, young adult`
+- **中文（25 个，必须用全角逗号 `，`）**：`东北话，中年，中音调，云南话，低音调，儿童，四川话，女，宁夏话，少年，极低音调，极高音调，桂林话，河南话，济南话，甘肃话，男，石家庄话，老年，耳语，贵州话，陕西话，青岛话，青年，高音调`
+- **中英不能混用**。
+
+我第一次 benchmark 传的是一句正常英文描述 `"A young female speaker with a calm, clear, neutral English accent."`，被 pre-check 直接拒了。最终要改成 `"female, british accent, young adult"` 才能过。
+
+这是**产品化的安全设计**——限定可控的属性组合，避免用户传任意 prompt 导致不可预期的输出（以及避开 prompt injection 类攻击）。但对使用者来说是个必须知道的限制：**design 模式不是 "prompt to voice"，是 "attribute to voice"**。CPU 部分 Demo 3 的示例代码其实正好踩在白名单上所以跑通了，没触发报错。
+
+### 环境与成本
+
+| 项 | 值 |
+|---|---|
+| Instance | g6e.4xlarge (16 vCPU / 128 GB / 1× L40S 48 GB) |
+| Region / AZ | us-west-2b（2a 当时 capacity 不足） |
+| AMI | Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.7（Ubuntu 22.04） |
+| PyTorch | 2.7.0+cu128，venv 在 `/opt/pytorch` |
+| 运行时长 | 17 分 7 秒 |
+| **EC2 费用** | **≈ $0.97**（g6e.4xlarge on-demand ~$3.397/h） |
+| GPU 监控 | `nvidia-smi dmon`：平均 SM util 10.2%（脉冲式），峰值 100% |
+| 峰值显存 | fp16 最高 2.29 GB / fp32 最高 5.15 GB（48 GB 富裕度巨大） |
+
+48 GB 显存对这个 812M 参数模型是**严重过剩**——单条推理只占 4–5%。可以直接堆 batch 做吞吐优化，或者单卡并发多个请求。
 
 ## 关键发现 / 学习心得
 
