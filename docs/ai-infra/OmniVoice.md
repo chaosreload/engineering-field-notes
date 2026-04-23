@@ -263,6 +263,50 @@ sf.write("out_design.wav", audio[0], 24000)
 
 clone 模式 RTF 最低不是因为推理更快（wall time 几乎一样都 ~1s），而是生成的音频最长——clone 模式会把 ref_text 拼进生成序列，输出更长的 token 序列摊薄了固定开销。
 
+### 三模式音频 Demo
+
+实际听起来什么效果？下面三段是 **dev-server CPU 上用上文 demo 脚本生成的原始输出**（24 kHz, 16-bit mono WAV，未后处理）。模型权重和 L40S 完全一致，只是推理慢——所以音质就是线上 RTF 0.04 档位的真实水准。
+
+**Auto Voice**（模型自选音色）
+
+> 文本：_"Hello, this is a test of OmniVoice on CPU."_
+
+<audio controls preload="none" style="width: 100%; max-width: 480px;">
+  <source src="/audio/omnivoice/out_auto.wav" type="audio/wav">
+  你的浏览器不支持 audio 播放。
+</audio>
+
+**Voice Cloning**（以 Auto 的输出作为参考音色，换一句话）
+
+> 参考音色：上面那段 Auto 输出（`out_auto.wav` 当 `ref_audio`）
+> 克隆文本：_"OmniVoice supports over six hundred languages."_
+
+参考：
+
+<audio controls preload="none" style="width: 100%; max-width: 480px;">
+  <source src="/audio/omnivoice/out_auto.wav" type="audio/wav">
+</audio>
+
+克隆输出：
+
+<audio controls preload="none" style="width: 100%; max-width: 480px;">
+  <source src="/audio/omnivoice/out_clone.wav" type="audio/wav">
+</audio>
+
+连着听能听出音色基本保留，但韵律和语速被新文本重新规划了——这正是 voice cloning 想要的行为（音色迁移，不是照搬）。
+
+**Voice Design**（属性描述式合成）
+
+> 文本：_"Diffusion language models can decode non-autoregressively."_
+> Instruct：`female, british accent`
+
+<audio controls preload="none" style="width: 100%; max-width: 480px;">
+  <source src="/audio/omnivoice/out_design.wav" type="audio/wav">
+</audio>
+
+提示：Voice Design 的 instruct 不是自由文本，必须走官方属性词典，下一节「Voice Design 的 instruct 不是自由文本」会展开讲。
+
+
 ### 三方对比：官方 claim / L40S 实测 / CPU
 
 | 场景 | RTF | 倍数 | 备注 |
