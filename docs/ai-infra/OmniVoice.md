@@ -306,6 +306,20 @@ clone 模式 RTF 最低不是因为推理更快（wall time 几乎一样都 ~1s�
 
 提示：Voice Design 的 instruct 不是自由文本，必须走官方属性词典，下一节「Voice Design 的 instruct 不是自由文本」会展开讲。
 
+**Voice Design · 中文方言（四川话）**
+
+Voice Design 的属性字典里有 12 种中文方言：河南话、陕西话、四川话、贵州话、云南话、桂林话、济南话、石家庄话、甘肃话、宁夏话、青岛话、东北话（仅对中文合成文本生效，英文文本下 dialect 属性会被忽略）。下面这段是和上面英文 Voice Design 对等的中文版，instruct 换成 `女，青年，四川话`：
+
+> 文本：_扩散语言模型可以非自回归地解码。_
+> Instruct：`女，青年，四川话`
+
+<audio controls preload="none" style="width: 100%; max-width: 480px;">
+  <source src="/audio/omnivoice/out_sichuan.wav" type="audio/wav">
+  你的浏览器不支持 audio 播放。
+</audio>
+
+在 dev-server CPU 上用 num_step=16 生成 3.19s 音频耗时 5.8s（RTF ≈ 1.81）。听感上声调、儿化、尾音的西南官话特征都能分辨出来；但毕竟是零样本属性合成，不是四川话母语人级别的还原。需要更稳的方言口音建议走 voice cloning 路线——挑一段目标方言的 5–10s 参考音频当 `ref_audio`，效果通常更自然。
+
 
 ### 三方对比：官方 claim / L40S 实测 / CPU
 
