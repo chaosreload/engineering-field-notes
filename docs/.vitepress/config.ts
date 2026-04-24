@@ -33,6 +33,7 @@ export default defineConfig({
             { text: 'Claude Code Game Studios', link: '/ai-agents/Claude-Code-Game-Studios' },
             { text: 'NitroGen — 通用游戏 Agent 基础模型', link: '/ai-agents/NitroGen' },
             { text: 'google/adk-python', link: '/ai-agents/adk-python' },
+            { text: 'agent-skills', link: '/ai-agents/agent-skills' },
             { text: 'ai-hedge-fund', link: '/ai-agents/ai-hedge-fund' },
             { text: 'Project AIRI', link: '/ai-agents/airi' },
             { text: 'autoresearch', link: '/ai-agents/autoresearch' },
